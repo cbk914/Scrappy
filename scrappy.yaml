@@ -1,0 +1,21 @@
+# scrappy.yaml
+tool:
+  name: "Scrappy"
+  description: "A custom web scraper that extracts text from websites."
+  docker_image: "your_docker_image"
+  results_directory: "/app/results"
+  command: "python scrappy.py -u {target} -o /app/results"
+  subdomain_tool: false
+  http_tool: true
+  tool_type: "Scraping"
+  version: '3'
+services:
+  scraper:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      - FLASK_APP=scrappy-web.py
+      - FLASK_RUN_HOST=0.0.0.0

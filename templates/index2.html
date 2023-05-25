@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Scraper</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Web Scraper</h1>
+    <form id="scrape-form">
+        <label for="url">URL:</label><br>
+        <input type="text" id="url" name="url"><br>
+        <input type="submit" value="Scrape">
+    </form>
+    <div id="result"></div>
+
+    <script>
+        var evilMode = false;
+
+        $(document).keydown(function(e) {
+            if (e.ctrlKey && e.key === 'e') {
+                evilMode = !evilMode;
+                alert('Evil mode ' + (evilMode ? 'enabled' : 'disabled'));
+            }
+        });
+
+        $('#scrape-form').submit(function(e) {
+            e.preventDefault();
+            var url = $('#url').val();
+            $.post('/api/scrape', { url: url, ignore_robots: evilMode }, function(data) {
+                $('#result').text(data.result);
+            });
+        });
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Scraper</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+    <h1>Web Scraper</h1>
+    <form id="scrape-form">
+        <label for="url">URL:</label><br>
+        <input type="text" id="url" name="url"><br>
+        <input type="submit" value="Scrape">
+    </form>
+    <div id="result"></div>
+
+    <script>
+        var evilMode = false;
+
+        $(document).keydown(function(e) {
+            if (e.ctrlKey && e.key === 'e') {
+                evilMode = !evilMode;
+                alert('Evil mode ' + (evilMode ? 'enabled' : 'disabled'));
+            }
+        });
+
+        $('#scrape-form').submit(function(e) {
+            e.preventDefault();
+            var url = $('#url').val();
+            $.post('/api/scrape', { url: url, ignore_robots: evilMode }, function(data) {
+                $('#result').text(data.result);
+            });
+        });
+    </script>
+</body>
+</html>
