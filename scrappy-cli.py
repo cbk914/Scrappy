@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Author: David Espejo (Fortytwo Security)
+# Author: cbk914
 import requests
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
