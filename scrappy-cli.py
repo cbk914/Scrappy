@@ -77,10 +77,12 @@ USER_AGENTS = [
     # ...add more user agents...
 ]
 
+# Create a secure SSL context
 ssl_context = ssl.create_default_context()
-ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2  # this disables TLS 1.0, 1.1, 1.2
+ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1  # Disable outdated TLS versions
 
 def connect_to_db():
+    """Connect to the MongoDB database."""
     try:
         client = MongoClient('mongodb://localhost:27017/', ssl_cert_reqs=ssl.CERT_REQUIRED, ssl_context=ssl_context)
         db = client['scrappy-db']
@@ -91,18 +93,15 @@ def connect_to_db():
 
 collection = connect_to_db()
 
-class TestScraper(unittest.TestCase):
-    def test_scrape_website(self):
-        pass
-
 def is_allowed(url, user_agent='*'):
+    """Check if scraping is allowed on the given URL."""
     rp = urllib.robotparser.RobotFileParser()
     rp.set_url(urljoin(url, "/robots.txt"))
     rp.read()
     return rp.can_fetch(user_agent, url)
 
-# Function to handle robots.txt
 def respect_robots_txt(url):
+    """Check if robots.txt allows scraping."""
     try:
         robots_txt_url = urljoin(url, "/robots.txt")
         response = requests.get(robots_txt_url)
@@ -113,8 +112,9 @@ def respect_robots_txt(url):
     except Exception as e:
         logging.error(f"Error reading robots.txt: {e}")
         return False
-    
+
 def scrape_website(url, delay):
+    """Scrape the website and save data to the database."""
     if not respect_robots_txt(url):
         logging.info(f"Skipping {url} due to robots.txt")
         return None
@@ -126,24 +126,25 @@ def scrape_website(url, delay):
     headers = {'User-Agent': random.choice(USER_AGENTS)}
     try:
         logging.info('Scraping %s', url)
-        response = requests.get(url, verify=ssl_context)
+        response = requests.get(url, headers=headers, verify=ssl_context)
         data = BeautifulSoup(response.text, 'html.parser')
         json_data = json.dumps(str(data))
         collection.insert_one({'url': url, 'data': json_data})
-        soup = BeautifulSoup(response.text, 'html.parser')
         time.sleep(random.uniform(0.5 * delay, 1.5 * delay))
         logging.info(f"Data successfully saved for {url}")
-        return soup
+        return data
     except requests.exceptions.RequestException as e:
         logging.error(f"Error scraping {url}: {e}")
 
 def process_website(url, delay):
+    """Process the website and extract text from paragraphs."""
     soup = scrape_website(url, delay)
     if soup:
         paragraphs = soup.find_all('p')
         return '\n'.join(paragraph.text for paragraph in paragraphs)
 
 def get_urls_from_file(file_path):
+    """Read URLs from a file."""
     try:
         with open(file_path, 'r') as file:
             return [line.strip() for line in file]
@@ -151,59 +152,35 @@ def get_urls_from_file(file_path):
         logging.error(f"Error reading file {file_path}: {e}")
         raise
 
-parser = argparse.ArgumentParser(description='Web scraper')
-parser.add_argument('-d', '--domain', help='Domain to scrape')
-parser.add_argument('-f', '--file', help='File containing list of domains to scrape')
-parser.add_argument('-o', '--output', help='Output file')
-parser.add_argument('-e', '--evil', help=argparse.SUPPRESS, action='store_true')
-
-args = parser.parse_args()
-
-urls = []
-
-if args.domain:
-    urls.append(args.domain)
-elif args.file:
-    urls = get_urls_from_file(args.file)
-with ThreadPoolExecutor(max_workers=20) as executor:
-    results = executor.map(process_website, urls)
-
-# Scrape the provided domain
-if args.domain:
-    scrape_website(args.domain, args.evil)
-
-# Scrape the domains in the provided file
-if args.file:
-    with open(args.file, "r") as f:
-        for line in f:
-            scrape(line.strip(), args.evil)
-
-if args.output:
-    with open(f"{args.output}.txt", 'w') as txt_file, open(f"{args.output}.html", 'w') as html_file:
-        for result in results:
-            if result:
-                txt_file.write(result + '\n')
-                html_file.write('<p>' + result + '</p>\n')
-                
-if args.output:
-    with open(args.output, "w") as f:
-        for document in collection.find():
-            f.write(json.dumps(document))
-            
-def main(domain, file, delay):
-    with open(file, 'r') as f:
-        urls = [url.strip() for url in f.readlines()]
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(scrape_website, url, delay) for url in urls]
-
-        for future in futures:
-            future.result()            
-            
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--domain', help='Domain to scrape', required=True)
-    parser.add_argument('-f', '--file', help='File with URLs to scrape', required=True)
-    parser.add_argument('--delay', help='Delay between requests', type=int, default=3)
+def main():
+    """Main function to handle argument parsing and initiating the scraping process."""
+    parser = argparse.ArgumentParser(description='Web scraper')
+    parser.add_argument('-d', '--domain', help='Domain to scrape')
+    parser.add_argument('-f', '--file', help='File containing list of domains to scrape')
+    parser.add_argument('-o', '--output', help='Output file')
+    parser.add_argument('-e', '--evil', help=argparse.SUPPRESS, action='store_true')
     args = parser.parse_args()
-    main(args.domain, args.file, args.delay)            
+
+    urls = []
+
+    if args.domain:
+        urls.append(args.domain)
+    elif args.file:
+        urls = get_urls_from_file(args.file)
+    
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = list(executor.map(lambda url: process_website(url, args.evil), urls))
+
+    if args.output:
+        with open(f"{args.output}.txt", 'w') as txt_file, open(f"{args.output}.html", 'w') as html_file:
+            for result in results:
+                if result:
+                    txt_file.write(result + '\n')
+                    html_file.write('<p>' + result + '</p>\n')
+
+        with open(args.output, "w") as f:
+            for document in collection.find():
+                f.write(json.dumps(document))
+
+if __name__ == "__main__":
+    main()
