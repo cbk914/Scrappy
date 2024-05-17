@@ -80,53 +80,66 @@ USER_AGENTS = [
     # ...add more user agents...
 ]
 
-# Set up MongoDB client
-# Uncomment for unsecure database connections (NOT RECOMMENDED)
-# client = MongoClient('mongodb://localhost:27017/')
+# Set up MongoDB client with TLS
 client = MongoClient('mongodb://localhost:27017/', tls=True)
 db = client['scraping_db']
 collection = db['scraped_data']
 
 def is_allowed(url, user_agent='*'):
+    """Check if scraping is allowed by robots.txt."""
     rp = urllib.robotparser.RobotFileParser()
     rp.set_url(url + "/robots.txt")
-    rp.read()
-    return rp.can_fetch(user_agent, url)
+    try:
+        rp.read()
+        return rp.can_fetch(user_agent, url)
+    except Exception as e:
+        logging.error(f"Error reading robots.txt for {url}: {e}")
+        return False
 
 def scrape_website(url, ignore_robots=False):
-    headers = {'User-Agent': random.choice(USER_AGENTS)}
-    response = requests.get(url, headers=headers)
+    """Scrape the website content."""
     if not ignore_robots and not is_allowed(url):
+        logging.info(f"Scraping disallowed by robots.txt for {url}")
         return None
+    headers = {'User-Agent': random.choice(USER_AGENTS)}
     try:
-        logging.info('Scraping %s', url)
-        response = requests.get(url, timeout=3)
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
+        time.sleep(random.uniform(0.5, 1.5))  # To respect site's rate limit
         return soup
     except requests.exceptions.RequestException as e:
+        logging.error(f"Error scraping {url}: {e}")
         raise InternalServerError("An error occurred while trying to scrape the website.")
-    time.sleep(1)
 
 def process_website(url, ignore_robots):
+    """Process the website and save data to MongoDB."""
     soup = scrape_website(url, ignore_robots)
     if soup:
         paragraphs = soup.find_all('p')
         result = '\n'.join(paragraph.text for paragraph in paragraphs)
-        # Insert the result into the MongoDB collection
         collection.insert_one({'url': url, 'result': result})
+        logging.info(f"Data successfully saved for {url}")
         return result
 
 @app.route('/')
 def home():
-    return render_template('index.html')  # The home page with the "Generate Report" button
+    return render_template('index.html')
 
 @app.route('/report', methods=['POST'])
 def report():
     domain = request.form.get('domain')
     evil = 'ctrl' in request.form and 'e' in request.form and 'v' in request.form
     output = "report.html"
-    subprocess.run(["python", "scraper.py", "-d", domain, "-o", output, "-e" if evil else ""])
-    return send_file(output)
+    try:
+        subprocess.run(["python", "scraper.py", "-d", domain, "-o", output, "-e" if evil else ""], check=True)
+        return send_file(output)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Subprocess error: {e}")
+        raise InternalServerError("An error occurred while executing the scraper.")
+    except Exception as e:
+        logging.error(f"Error sending file: {e}")
+        raise InternalServerError("An error occurred while sending the report file.")
 
 @app.route('/api/scrape', methods=['POST'])
 def scrape():
@@ -140,9 +153,5 @@ def scrape():
     result = process_website(url, ignore_robots)
     return jsonify({'result': result})
 
-# Uncomment these lines for unsecure server (NOT RECOMMENDED)
-# if __name__ == '__main__':
-#    app.run(debug=True)
 if __name__ == '__main__':
     app.run(debug=True, ssl_context=('cert.pem', 'key.pem'))
-    
