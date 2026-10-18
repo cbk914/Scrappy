@@ -1,5 +1,19 @@
+# Scrappy runtime dependencies.
+# Every entry below is imported by the code in this repository.
+#
+# Removed: the duplicate "requests==2.25.1" pin (see previous line 3). Having
+# both requests==2.31.0 and requests==2.25.1 made `pip install -r requirements.txt`
+# fail outright with ResolutionImpossible.
+# Bumped: pymongo 3.11.4 (2019) -> 4.x. The code only uses MongoClient,
+# insert_one() and find() (scrappy-api.py:16,42; scrappy-cli.py:85,132,190;
+# scrappy-web.py:86,116), all of which are unchanged in pymongo 4.x.
+# Note: werkzeug (scrappy-web.py:13, scrappy-api.py:10) is imported directly and
+# is required indirectly by flask, so it is pinned explicitly. The <3 ceiling is
+# mandatory: Werkzeug 3.0 removed `werkzeug.__version__`, which flask 2.2.5 reads
+# in flask/testing.py:116, so flask 2.2.5 + Werkzeug 3.x resolves cleanly but
+# dies at runtime with AttributeError.
 requests==2.31.0
 flask==2.2.5
-requests==2.25.1
+Werkzeug>=2.2.2,<3
 beautifulsoup4==4.9.3
-pymongo==3.11.4
+pymongo>=4.6,<5
